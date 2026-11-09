@@ -11,6 +11,8 @@ TIER2_GROUP="${TIER2_GROUP:-gaga-t2}"
 TIER3_GROUP="${TIER3_GROUP:-gaga-t3}"
 MENU_SCRIPT="$DEPLOY_DIR/manage.sh"
 REPO_URL_DEFAULT="${REPO_URL:-git@github.com:SrRusian/gaga-platform.git}"
+# the branch to download is asked in the repository step (empty = the default branch, main); REPO_BRANCH presets it
+REPO_BRANCH="${REPO_BRANCH:-}"
 STATE_DIR=/var/lib/gaga-bootstrap
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 KEY_REGEX='^(ssh-ed25519|ssh-rsa|ecdsa-sha2-[a-z0-9]+) [A-Za-z0-9+/=]+( .*)?$'
@@ -120,6 +122,7 @@ step_repo() {
   echo
   wait_for "Did you add the key in GitHub?"
   ask REPO_URL "Repository (ssh address):" "$REPO_URL_DEFAULT"
+  ask REPO_BRANCH "Branch to download (empty = main):" "$REPO_BRANCH"
   local ssh_cmd="ssh -i $GIT_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
   until GIT_SSH_COMMAND="$ssh_cmd" git ls-remote "$REPO_URL" HEAD >/dev/null; do
     echo "GitHub did not accept the key for $REPO_URL (check the repository address and that the key was added there)."
@@ -129,7 +132,7 @@ step_repo() {
     echo "The code is already in $DEPLOY_DIR, nothing to clone."
   else
     install -d -m 2775 -o root -g "$SHARED_GROUP" "$DEPLOY_DIR"
-    GIT_SSH_COMMAND="$ssh_cmd" sh -c 'umask 002; git clone "$1" "$2"' _ "$REPO_URL" "$DEPLOY_DIR"
+    GIT_SSH_COMMAND="$ssh_cmd" sh -c 'umask 002; git clone ${3:+-b "$3"} "$1" "$2"' _ "$REPO_URL" "$DEPLOY_DIR" "$REPO_BRANCH"
   fi
   fix_perms
 }
@@ -174,7 +177,7 @@ step_deploy() {
   sudo -u "$DEPLOY_USER" docker ps >/dev/null && echo "  [ok] $DEPLOY_USER runs docker" || echo "  [FAIL] $DEPLOY_USER cannot run docker"
   grep -q "command=\"bash $DEPLOY_DIR/deploy/server/deploy.sh\"" "$SSH_DIR/authorized_keys" && echo "  [ok] Actions key limited to deploy.sh" || echo "  [FAIL] key line missing"
   if [ -d "$DEPLOY_DIR/.git" ]; then
-    sudo -u "$DEPLOY_USER" git -C "$DEPLOY_DIR" fetch --quiet origin main && echo "  [ok] $DEPLOY_USER can fetch the repository" || echo "  [FAIL] $DEPLOY_USER cannot fetch (is the deploy key added in GitHub?)"
+    sudo -u "$DEPLOY_USER" git -C "$DEPLOY_DIR" fetch --quiet origin "${REPO_BRANCH:-main}" && echo "  [ok] $DEPLOY_USER can fetch the repository" || echo "  [FAIL] $DEPLOY_USER cannot fetch (is the deploy key added in GitHub?)"
   else
     echo "  [skip] the code is not cloned yet (run the 'repo' step)"
   fi
@@ -425,7 +428,7 @@ protected_full() {
   if [ -z "${TMUX:-}" ] && [ -z "${GAGA_NO_TMUX:-}" ] && [ -t 0 ]; then
     command -v tmux >/dev/null 2>&1 || { touch "$STATE_DIR/installed-tmux"; apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmux; }
     echo "Starting inside tmux (session gaga-setup). If the connection drops, log in again and run this script: it re-attaches."
-    exec tmux new-session -A -s gaga-setup "GAGA_NO_TMUX=1 bash '$SELF' full; printf '\nPress Enter to close this window. '; read -r _"
+    exec tmux new-session -A -s gaga-setup "GAGA_NO_TMUX=1 REPO_BRANCH='$REPO_BRANCH' bash '$SELF' full; printf '\nPress Enter to close this window. '; read -r _"
   fi
   step_full
 }
