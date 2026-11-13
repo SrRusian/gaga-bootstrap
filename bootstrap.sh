@@ -25,7 +25,7 @@ install -d -m 755 "$STATE_DIR"
 say() { printf '\n== %s\n' "$*"; }
 cancel_run() { echo; echo "Cancelled on purpose. Run the full installation again to resume where it stopped."; exit 130; }
 ask() { local __var="$1" __reply; printf '%s ' "$2"; read -r __reply || __reply=""; [ "$__reply" != cancel ] || cancel_run; printf -v "$__var" '%s' "${__reply:-${3:-}}"; }
-yes() { local reply; printf '%s (si/no) ' "$1"; read -r reply || reply=""; [ "$reply" != cancel ] || cancel_run; [[ "$reply" =~ ^(si|s|yes|y)$ ]]; }
+yes() { local reply; printf '%s (y/n) ' "$1"; read -r reply || reply=""; [ "$reply" != cancel ] || cancel_run; [[ "${reply,,}" =~ ^(y|yes)$ ]]; }
 wait_for() { yes "$1" || { echo "Stopped. Run the full installation again to resume here."; exit 1; }; }
 
 done_step() { grep -qx "$1" "$STATE_DIR/progress" 2>/dev/null; }
